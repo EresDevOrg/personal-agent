@@ -1,10 +1,8 @@
 import { Octokit } from "@octokit/rest";
-import { returnDataToKernel } from "./helpers/validator";
-import { Env, PluginInputs } from "./types";
-import { Context } from "./types";
-import { isIssueCommentEvent } from "./types/typeguards";
-import { helloWorld } from "./handlers/hello-world";
 import { LogLevel, Logs } from "@ubiquity-dao/ubiquibot-logger";
+import { delegate } from "./handlers/front-controller";
+import { Context, Env, PluginInputs } from "./types";
+import { isIssueCommentEvent } from "./types/typeguards";
 
 /**
  * The main plugin function. Split for easier testing.
@@ -13,7 +11,7 @@ export async function runPlugin(context: Context) {
   const { logger, eventName } = context;
 
   if (isIssueCommentEvent(context)) {
-    return await helloWorld(context);
+    return await delegate(context);
   }
 
   logger.error(`Unsupported event: ${eventName}`);
@@ -23,7 +21,7 @@ export async function runPlugin(context: Context) {
  * How a worker executes the plugin.
  */
 export async function plugin(inputs: PluginInputs, env: Env) {
-  const octokit = new Octokit({ auth: inputs.authToken });
+  const octokit = new Octokit({ auth: env.PERSONAL_AGENT_PAT_CLASSIC });
 
   const context: Context = {
     eventName: inputs.eventName,
@@ -46,5 +44,4 @@ export async function plugin(inputs: PluginInputs, env: Env) {
    */
 
   await runPlugin(context);
-  return returnDataToKernel(process.env.GITHUB_TOKEN, inputs.stateId, {});
 }
