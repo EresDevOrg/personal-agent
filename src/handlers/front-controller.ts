@@ -1,4 +1,5 @@
 import { Context } from "../types";
+import { sayHello } from "./say-hello";
 
 /**
  * NOTICE: Remove this file or use it as a template for your own plugins.
@@ -10,13 +11,8 @@ import { Context } from "../types";
  *
  * Logger examples are provided to show how to log different types of data.
  */
-export async function helloWorld(context: Context) {
-  const {
-    logger,
-    payload,
-    octokit,
-    config: { configurableResponse, customStringsUrl },
-  } = context;
+export async function delegate(context: Context) {
+  const { logger, payload, octokit } = context;
 
   const sender = payload.comment.user?.login;
   const repo = payload.repository.name;
@@ -24,30 +20,35 @@ export async function helloWorld(context: Context) {
   const owner = payload.repository.owner.login;
   const body = payload.comment.body;
 
-  if (!body.match(/hello/i)) {
-    logger.error(`Invalid use of slash command, use "/hello".`, { body });
+  logger.debug(`Executing decideHandler:`, { sender, repo, issueNumber, owner });
+
+  const targetUser = body.match(/^\B@([a-z0-9](?:-(?=[a-z0-9])|[a-z0-9]){0,38}(?<=[a-z0-9]))/i);
+  if (!targetUser) {
+    logger.error(`Missing target username from comment: ${body}`);
     return;
   }
+  const personalAgentOwner = targetUser[0].replace("@", "");
 
-  logger.info("Hello, world!");
-  logger.debug(`Executing helloWorld:`, { sender, repo, issueNumber, owner });
+  logger.info(`Comment received:`, { owner, personalAgentOwner, comment: body });
+
+  let reply;
+
+  if (body.match(/^\B@([a-z0-9](?:-(?=[a-z0-9])|[a-z0-9]){0,38}(?<=[a-z0-9]))\s+say\s+hello$/i)) {
+    reply = sayHello();
+  } else {
+    reply = "I could not understand your comment to give you a quick response. I will get back to you later.";
+    logger.error(`Invalid command.`, { body });
+  }
+
+  const replyWithQuote = ["> ", `${body}`, "\n\n", reply].join("");
 
   try {
     await octokit.issues.createComment({
       owner: payload.repository.owner.login,
       repo: payload.repository.name,
       issue_number: payload.issue.number,
-      body: configurableResponse,
+      body: replyWithQuote,
     });
-    if (customStringsUrl) {
-      const response = await fetch(customStringsUrl).then((value) => value.json());
-      await octokit.issues.createComment({
-        owner: payload.repository.owner.login,
-        repo: payload.repository.name,
-        issue_number: payload.issue.number,
-        body: response.greeting,
-      });
-    }
   } catch (error) {
     /**
      * logger.fatal should not be used in 9/10 cases. Use logger.error instead.
@@ -63,6 +64,6 @@ export async function helloWorld(context: Context) {
     }
   }
 
-  logger.ok(`Successfully created comment!`);
-  logger.verbose(`Exiting helloWorld`);
+  logger.ok(`Comment created: ${reply}`);
+  logger.verbose(`Exiting decideHandler`);
 }
